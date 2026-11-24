@@ -190,6 +190,8 @@ def main(path):
         old = json.load(f)
     old_iss = next((s for s in parse(old.get("tle", "")) if norad(s) == ISS), None)
 
+    out = dict(old)
+
     print("Brightest satellites:")
     sources = {}
     for label, url in (("CelesTrak", CELESTRAK.format(group="visual")),
@@ -197,41 +199,48 @@ def main(path):
         sats = try_group(label, url, MIN_VISUAL, ISS)
         if sats:
             sources[label] = sats
-    if not sources:
-        print("No usable source today; keeping the existing data.")
-        return
 
     def iss_of(sats):
         return next(s for s in sats if norad(s) == ISS)
 
-    primary = max(sources, key=lambda k: epoch(iss_of(sources[k])))
-    visual = sources[primary]
-    if old_iss and epoch(iss_of(visual)) <= epoch(old_iss):
-        print("Nothing newer than the data already on the site; keeping it.")
-        return
-    print(f"Using {primary} (ISS elements from {epoch(iss_of(visual)):%Y-%m-%d %H:%M} UTC)")
-
-    cross = {}
-    other = next((k for k in sources if k != primary), None)
-    if other:
-        a = {norad(s): s for s in visual}
-        b = {norad(s): s for s in sources[other]}
-        for sid in (ISS, TIANGONG):
-            if sid in a and sid in b:
-                km = km_apart(a[sid], b[sid], now)
-                if km is not None:
-                    cross[str(sid)] = km
-        print(f"Cross-check against {other}: {cross}")
-
-    if primary == "CelesTrak":
-        source = 'CelesTrak "brightest" (visual) group, fetched daily, line checksums verified'
-        updated = now
+    visual_changed = False
+    if not sources:
+        print("  no usable source today; keeping the existing list")
     else:
-        source = 'CelesTrak "brightest" (visual) group via github.com/caelo-works/tle-mirror, line checksums verified'
-        try:
-            updated = dt.datetime.fromisoformat(fetch(MIRROR_UPDATED).strip().replace("Z", "+00:00"))
-        except Exception:
-            updated = now
+        primary = max(sources, key=lambda k: epoch(iss_of(sources[k])))
+        visual = sources[primary]
+        if old_iss and epoch(iss_of(visual)) <= epoch(old_iss):
+            print("  nothing newer than the list already on the site; keeping it")
+        else:
+            print(f"  using {primary} (ISS elements from {epoch(iss_of(visual)):%Y-%m-%d %H:%M} UTC)")
+            cross = {}
+            other = next((k for k in sources if k != primary), None)
+            if other:
+                a = {norad(s): s for s in visual}
+                b = {norad(s): s for s in sources[other]}
+                for sid in (ISS, TIANGONG):
+                    if sid in a and sid in b:
+                        km = km_apart(a[sid], b[sid], now)
+                        if km is not None:
+                            cross[str(sid)] = km
+                print(f"  cross-check against {other}: {cross}")
+            if primary == "CelesTrak":
+                out["source"] = 'CelesTrak "brightest" (visual) group, fetched daily, line checksums verified'
+                updated = now
+            else:
+                out["source"] = ('CelesTrak "brightest" (visual) group via github.com/caelo-works/tle-mirror, '
+                                 'line checksums verified')
+                try:
+                    updated = dt.datetime.fromisoformat(fetch(MIRROR_UPDATED).strip().replace("Z", "+00:00"))
+                except Exception:
+                    updated = now
+            out.update({
+                "mirrorUpdated": updated.isoformat().replace("+00:00", "Z"),
+                "count": len(visual),
+                "crossCheckKm": cross,
+                "tle": to_text(visual),
+            })
+            visual_changed = True
 
     print("Recent launches:")
     recent = None
@@ -243,28 +252,30 @@ def main(path):
             break
         if sats:
             print(f"  {label}: older than {RECENT_DAYS} days, skipped")
+    recent_changed = False
     if recent:
         recent.sort(key=lambda s: (launch_key(s), s[1][14:17]), reverse=True)
-        recent = recent[:RECENT_MAX]
-        recent.sort(key=norad)
-        print(f"  keeping the newest {len(recent)}")
+        recent = sorted(recent[:RECENT_MAX], key=norad)
+        text = to_text(recent)
+        if text != old.get("recent", ""):
+            out["recent"] = text
+            recent_changed = True
+            print(f"  keeping the newest {len(recent)}")
+        else:
+            print("  unchanged")
     else:
-        recent = parse(old.get("recent", ""))
-        print(f"  none available; keeping the previous {len(recent)}")
+        print("  none available; keeping the previous list")
 
-    out = {
-        "source": source,
-        "mirrorUpdated": updated.isoformat().replace("+00:00", "Z"),
-        "built": now.isoformat().replace("+00:00", "Z"),
-        "count": len(visual),
-        "crossCheckKm": cross,
-        "tle": to_text(visual),
-        "recent": to_text(recent) if recent else "",
-    }
+    if not (visual_changed or recent_changed):
+        print("Nothing to update.")
+        return
+    out["built"] = now.isoformat().replace("+00:00", "Z")
+    out.setdefault("crossCheckKm", {})
     with open(path, "w", encoding="utf-8") as f:
         json.dump(out, f, ensure_ascii=False, indent=1)
         f.write("\n")
-    print(f"Wrote {path}: {len(visual)} bright satellites, {len(recent)} recent launches.")
+    n_recent = len(parse(out.get("recent", "")))
+    print(f"Wrote {path}: {out['count']} bright satellites, {n_recent} recent launches.")
 
 
 if __name__ == "__main__":
