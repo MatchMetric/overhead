@@ -1,0 +1,60 @@
+name: Refresh satellite data and publish
+
+on:
+  schedule:
+    - cron: "43 5 * * *"   # every day at 05:43 UTC (4:43 pm in Sydney during daylight saving)
+  push:
+    branches: [main]
+  workflow_dispatch:      # "Run workflow" button in the Actions tab
+
+permissions:
+  contents: write         # commit the refreshed data/tle.json
+  pages: write            # publish to GitHub Pages
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up Python
+        if: github.event_name != 'push'
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+
+      - name: Fetch fresh satellite orbits
+        if: github.event_name != 'push'
+        run: |
+          pip install --quiet sgp4
+          python .github/scripts/refresh_tle.py data/tle.json
+
+      - name: Save the new data to the repo
+        if: github.event_name != 'push'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data/tle.json
+          if git diff --cached --quiet; then
+            echo "No change to the satellite data."
+          else
+            git commit -m "Refresh satellite orbits"
+            git push
+          fi
+
+      - uses: actions/configure-pages@v6
+
+      - uses: actions/upload-pages-artifact@v5
+        with:
+          path: .
+
+      - id: deployment
+        uses: actions/deploy-pages@v5
