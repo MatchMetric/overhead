@@ -892,7 +892,7 @@ function freshness() {
   const age = (Date.now() - iss.epoch) / H, el = $('fresh');
   el.className = age > 72 ? 'chip warn' : '';
   el.textContent = age > 72 ? `Orbital data is ${(age / 24).toFixed(1)} days old: ISS times may be off by a minute or more` : `Orbital data ${age < 1 ? 'under an hour' : Math.round(age) + ' h'} old`;
-  if (st.meta) $('dataNote').textContent = `Orbital elements: ${st.meta.source}; mirror updated ${new Date(st.meta.mirrorUpdated).toISOString().slice(0, 16).replace('T', ' ')} UTC; ${st.meta.count} bright satellites and ${st.groups.recent.length} recent launches. ISS and Tiangong were cross-checked against a second CelesTrak mirror (agreement ${st.meta.crossCheckKm['25544']} km and ${st.meta.crossCheckKm['48274']} km).`;
+  if (st.meta) $('dataNote').textContent = `Orbital elements: ${st.meta.source}; updated ${new Date(st.meta.mirrorUpdated).toISOString().slice(0, 16).replace('T', ' ')} UTC; ${st.meta.count} bright satellites and ${st.groups.recent.length} recent launches.` + ((st.meta.crossCheckKm && st.meta.crossCheckKm['25544'] != null) ? ` ISS and Tiangong were cross-checked against a second source (agreement ${st.meta.crossCheckKm['25544']} km and ${st.meta.crossCheckKm['48274'] != null ? st.meta.crossCheckKm['48274'] : '–'} km).` : ' Not cross-checked against a second source this time.');
 }
 // red night-vision mode
 function setRed(on) { document.documentElement.classList.toggle('red', on); $('redBtn').setAttribute('aria-pressed', on); store.set('ov-red', on); }
