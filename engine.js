@@ -17,6 +17,11 @@
     const y = yy < 57 ? 2000 + yy : 1900 + yy;
     return new Date(Date.UTC(y, 0, 1) + (doy - 1) * 86400000);
   }
+  // Catalogue number from columns 3-7. Numbers from 100000 up use Alpha-5: a letter (A=10 ... Z=33, no I or O) for the first two digits.
+  function catNum(field) {
+    const k = 'ABCDEFGHJKLMNPQRSTUVWXYZ'.indexOf(field.charAt(0));
+    return k >= 0 ? (k + 10) * 10000 + +field.slice(1) : +field;
+  }
   function parseTLE(text) {
     const lines = text.split(/\r?\n/).map(l => l.replace(/\s+$/, '')).filter(l => l.length);
     const out = [], bad = [];
@@ -24,8 +29,8 @@
       if (lines[i].startsWith('1 ') && lines[i + 1] && lines[i + 1].startsWith('2 ')) {
         const name = (i > 0 && !/^[12] /.test(lines[i - 1])) ? lines[i - 1].trim() : 'NORAD ' + lines[i].slice(2, 7).trim();
         const l1 = lines[i], l2 = lines[i + 1];
-        const id = +l1.slice(2, 7);
-        if (!tleChecksumOK(l1) || !tleChecksumOK(l2) || +l2.slice(2, 7) !== id) { bad.push(name); i++; continue; }
+        const id = catNum(l1.slice(2, 7));
+        if (!tleChecksumOK(l1) || !tleChecksumOK(l2) || catNum(l2.slice(2, 7)) !== id) { bad.push(name); i++; continue; }
         const rec = S.twoline2satrec(l1, l2);
         if (rec.error) { bad.push(name); i++; continue; }
         out.push({ name, id, l1, l2, epoch: tleEpoch(l1), rec, incl: +l2.slice(8, 16), revPerDay: +l2.slice(52, 63) });
